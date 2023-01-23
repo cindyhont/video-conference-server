@@ -1,6 +1,6 @@
 import { MediaKind, RtpParameters } from "mediasoup/node/lib/types";
 import { WebSocket } from "ws";
-import { getTransport, setClient, setProducer } from ".";
+import { getTransport, setClientProducerID, setProducer } from ".";
 import broadcast from "../_ws/broadcast";
 import send from "../_ws/send";
 import { InewProducer, Iproduced } from "./interfaces";
@@ -21,15 +21,17 @@ const onProduce = async (
 ) => {
     const producer = await getTransport(transportID).produce({kind,rtpParameters})
     setProducer(producer)
-    setClient({
-        id:clientID,
-        producerID:producer.id
-    })
+    setClientProducerID(
+        clientID,
+        producer.id,
+        kind
+    )
 
     const sendMessage:Iproduced = {
         type:'produced',
         payload:{
             id:producer.id,
+            kind
         },
     }
     send(sendMessage,ws)
@@ -38,6 +40,8 @@ const onProduce = async (
         type:'newProducer',
         payload:{
             producerID:producer.id,
+            producerClientID:clientID,
+            kind
         }
     }
     broadcast(broadcastMessage,clientID)

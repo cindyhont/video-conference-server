@@ -1,28 +1,31 @@
-import { RtpCapabilities, Transport } from "mediasoup/node/lib/types"
+import { MediaKind, RtpCapabilities, Transport } from "mediasoup/node/lib/types"
 import { WebSocket } from "ws"
-import { addConsumerTransport, getProducer, msRouter } from "."
+import { getProducer, msRouter, setClientConsumerTransportID, setTransport } from "."
 import send from "../_ws/send"
 import createWebRtcTransport from "./createWebRtcTransport"
 import { IconsumerTransportCreated } from "./interfaces"
 
 const 
-    onCreateConsumerTransport = async (ws:WebSocket,clientID:string,producerID:string) => {
+    onCreateConsumerTransport = async (ws:WebSocket,clientID:string,producerID:string,producerClientID:string,kind:MediaKind) => {
         try {
             let { transport, params } = await createWebRtcTransport()
-            addConsumerTransport(transport,clientID)
+            setTransport(transport)
+            setClientConsumerTransportID(clientID,transport.id,producerClientID,kind)
 
             const message:IconsumerTransportCreated = {
                 type:'consumerTransportCreated',
                 payload:{
                     consumerTransportParams:params,
                     producerID,
+                    producerClientID
                 }
             }
             send(message,ws)
         } catch (error) {
             console.error(error)
         }
-    },
+    }
+    /*
     createConsumer = async (producerId:string, consumerTranport:Transport, rtpCapabilities:RtpCapabilities) => {
         if (!msRouter.canConsume({producerId,rtpCapabilities})){
             console.error('can not consume')
@@ -49,5 +52,6 @@ const
             producerPaused:consumer.producerPaused,
         }
     }
+    */
 
 export { onCreateConsumerTransport }

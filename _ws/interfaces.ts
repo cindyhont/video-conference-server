@@ -15,14 +15,13 @@ export interface InewClient {
     }
 }
 
-export interface IdeleteClient {
+export interface IlbDeleteClient {
     type:'deleteClient';
     payload:{
         roomID:string;
-        deleteRoom:boolean;
     }
 }
 
 export type IlbEvent = Ijoin
     | InewClient
-    | IdeleteClient
+    | IlbDeleteClient

@@ -2,20 +2,22 @@ import send from "../_ws/send"
 import createWebRtcTransport from "./createWebRtcTransport"
 import { IproducerTransportCreated } from "./interfaces"
 import { WebSocket } from 'ws'
-import { setClient, setTransport } from "."
+import { setClientProducerTransportID, setTransport } from "."
+import { MediaKind } from "mediasoup/node/lib/types"
 
-const onCreateProducerTransport = async (ws:WebSocket,clientID:string) => {
+const onCreateProducerTransport = async (ws:WebSocket,clientID:string,kind:MediaKind) => {
     try {
         const { transport, params } = await createWebRtcTransport()
-        setClient({
-            id:clientID,
-            producerTransportID:transport.id
-        })
+        setClientProducerTransportID(
+            clientID,
+            transport.id,
+            kind
+        )
         setTransport(transport)
 
         const message:IproducerTransportCreated = {
             type:'producerTransportCreated',
-            payload: params
+            payload: {params,kind}
         }
         send(message,ws)
     } catch (error) {

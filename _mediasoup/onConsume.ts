@@ -1,6 +1,6 @@
-import { RtpCapabilities } from "mediasoup/node/lib/types"
+import { Consumer, RtpCapabilities } from "mediasoup/node/lib/types"
 import { WebSocket } from "ws"
-import { getTransport, msRouter } from "."
+import { getTransport, msRouter, setConsumer } from "."
 import send from "../_ws/send"
 import { Isubscribed } from "./interfaces"
 
@@ -21,13 +21,14 @@ const
             return
         }
 
-        let consumer
+        let consumer:Consumer
         try {
             consumer = await getTransport(consumerTranportID).consume({
                 producerId,
                 rtpCapabilities,
-                paused: false,//getProducer(producerId).kind !== 'video',
+                paused: true,//false,//getProducer(producerId).kind !== 'video',
             })
+            setConsumer(consumer)
         } catch (error) {
             console.error('consume failed: ',error)
             return

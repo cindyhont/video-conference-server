@@ -1,4 +1,4 @@
-import { DtlsParameters } from "mediasoup/node/lib/types"
+import { DtlsParameters, MediaKind } from "mediasoup/node/lib/types"
 import WebSocket from "ws"
 import { getTransport, setTransport } from "."
 // import { producerTransport } from "."
@@ -8,10 +8,12 @@ import { IproducerConnected } from "./interfaces"
 const onConnectProducerTransport = async (
     {
         transportID,
-        dtlsParameters
+        dtlsParameters,
+        mediaKind
     }:{
         transportID:string;
         dtlsParameters: DtlsParameters;
+        mediaKind:MediaKind;
     },
     ws:WebSocket
 ) => {
@@ -19,6 +21,9 @@ const onConnectProducerTransport = async (
     
     const message:IproducerConnected = {
         type:'producerConnected',
+        payload:{
+            mediaKind
+        }
     }
     send(message,ws)
 }

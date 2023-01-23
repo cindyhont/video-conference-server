@@ -1,16 +1,12 @@
 import {
-    version,
-    observer,
     createWorker,
-    getSupportedRtpCapabilities,
-    parseScalabilityMode
 } from "mediasoup";
 import { 
-    Router, 
     RtpCodecCapability, 
-    Worker 
 } from "mediasoup/node/lib/types";
+import dotenv from 'dotenv'
 
+dotenv.config()
 
 const createMsWorker = async () => {
     const worker = await createWorker({
@@ -23,8 +19,8 @@ const createMsWorker = async () => {
             'srtp',
             'rtcp',
         ],
-        rtcMinPort: 10000,
-        rtcMaxPort: 10100,
+        rtcMinPort: +(<string>process.env.RTC_MIN_PORT),
+        rtcMaxPort: +(<string>process.env.RTC_MAX_PORT),
     });
     
     worker.on('died',()=>{

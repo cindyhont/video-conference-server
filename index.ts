@@ -54,7 +54,7 @@ const launchWS = () => {
                     )
                     break;
                 case 'createProducerTransport':
-                    onCreateProducerTransport(socket,payload.clientID)
+                    onCreateProducerTransport(socket,payload.clientID,payload.kind)
                     break;
                 case 'connectProducerTransport':
                     onConnectProducerTransport(payload,socket)
@@ -63,13 +63,19 @@ const launchWS = () => {
                     onProduce(payload,socket)
                     break;
                 case 'createConsumerTransport':
-                    onCreateConsumerTransport(socket,payload.clientID,payload.producerID)
+                    onCreateConsumerTransport(
+                        socket,
+                        payload.clientID,
+                        payload.producerID,
+                        payload.producerClientID,
+                        payload.kind
+                    )
                     break;
                 case 'connectConsumerTransport':
                     onConnectConsumerTransport(payload.dtlsParameters,payload.transportID,socket)
                     break;
                 case 'resume':
-                    onResume(payload.rtpCapabilities,payload.transportID,payload.producerID,socket)
+                    onResume(payload.rtpCapabilities,payload.transportID,payload.producerID,socket,payload.consumerID)
                     break
                 case 'consume':
                     onConsume(payload.producerID,payload.consumerTranportID,payload.rtpCapabilities,socket)

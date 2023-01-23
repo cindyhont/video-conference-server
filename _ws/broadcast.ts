@@ -11,7 +11,7 @@ const broadcast = (message:IwsBroadcast,clientID:string) => {
     const clientIDs = rooms[roomID]
 
     clientIDs.forEach(clientId=>{
-        if (clientID !== clientId && clientID in clients && !!clients[clientId].producerID) clients[clientId]?.socket?.send(msg)
+        if (clientID !== clientId && clientID in clients && !!clients[clientId].producerIDs) clients[clientId]?.socket?.send(msg)
     })
 }
 

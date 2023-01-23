@@ -9,18 +9,25 @@ const onFetchExistingProducerIDs = (roomID:string,clientID:string,ws:WebSocket) 
     const clientIDs = rooms[roomID].filter(e=>e!==clientID)
     if (!clientIDs.length) return
 
-    const producerIDs = clientIDs
-        .map(e=>clients[e].producerID || '')
-        .filter(e=>e !== '')
-    if (!producerIDs.length) return
-
-    const message:IexistingProducerIDs = {
-        type:'existingProducerIDs',
-        payload:{
-            producerIDs
+    let payload:{
+        [_clientID:string]:{
+            [kind:string]:string;
         }
+    } = {}
+
+    clientIDs.forEach(_clientID=>{
+        if (_clientID in clients && !!clients[_clientID]?.producerIDs){
+            payload[_clientID] = clients[_clientID].producerIDs as { [kind:string]:string; }
+        }
+    })
+
+    if (Object.keys(payload).length){
+        const message:IexistingProducerIDs = {
+            type:'existingProducerIDs',
+            payload
+        }
+        send(message,ws)
     }
-    send(message,ws)
 }
 
 export { onFetchExistingProducerIDs }

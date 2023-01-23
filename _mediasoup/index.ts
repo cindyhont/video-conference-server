@@ -1,15 +1,18 @@
-import { Producer, Router, Transport } from "mediasoup/node/lib/types";
+import { Consumer, MediaKind, Producer, Router, Transport } from "mediasoup/node/lib/types";
 import { WebSocket } from "ws";
 import broadcast from "../_ws/broadcast";
-import { IdeleteClient, InewClient } from "../_ws/interfaces";
+import { IlbDeleteClient, InewClient } from "../_ws/interfaces";
 import { sendToLoadBalancer } from "../_ws/sendToLoadBalancer";
 import createWorker from "./createWorker";
-import { IdeleteProducer } from "./interfaces";
+import { IdeleteClient } from "./interfaces";
 
 let 
     msRouter: Router,
     producers:{
         [id:string]:Producer;
+    } = {},
+    consumers:{
+        [id:string]:Consumer;
     } = {},
     transports:{
         [id:string]:Transport;
@@ -21,9 +24,22 @@ let
         [id:string]:{
             roomID:string;
             socket:WebSocket;
-            producerID?:string;
-            producerTransportID?:string;
-            consumerTransportIDs:string[];
+            producerIDs?:{
+                [kind:string]:string;
+            };
+            producerTransportIDs?:{
+                [kind:string]:string;
+            };
+            consumerIDs?:{
+                [producerClientID:string]:{
+                    [kind:string]:string;
+                }
+            };
+            consumerTransportIDs?:{
+                [producerClientID:string]:{
+                    [kind:string]:string;
+                }
+            };
         }
     } = {}
 
@@ -37,15 +53,22 @@ const
     },
     setProducer = (_producer:Producer) => producers[_producer.id] = _producer,
     getProducer = (id:string) => producers[id],
-    deleteProducer = (id:string) => delete producers[id],
+    deleteProducer = (id:string) => {
+        producers[id]?.close()
+        delete producers[id]
+    },
+    setConsumer = (c:Consumer) => consumers[c.id] = c,
+    getConsumer = (consumerID:string) => consumers[consumerID],
     setTransport = (_transport:Transport) => transports[_transport.id] = _transport,
     getTransport = (id:string) => transports[id],
-    deleteTransport = (id:string) => delete transports[id],
+    deleteTransport = (id:string) => {
+        transports[id]?.close()
+        delete transports[id]
+    },
     addClient = (wsClient:WebSocket,roomID:string,clientID:string,serverHost:string) => {
         clients[clientID] = {
             socket:wsClient,
             roomID,
-            consumerTransportIDs:[]
         }
         if (roomID in rooms) rooms[roomID] = [...rooms[roomID],clientID]
         else rooms[roomID] = [clientID]
@@ -59,21 +82,56 @@ const
         }
         sendToLoadBalancer(message)
     },
-    setClient = (
-        {
-            id,
-            producerID,
-            producerTransportID,
-        }:{
-            id:string;
-            producerID?:string;
-            producerTransportID?:string;
+    setClientProducerID = (clientID:string,producerID:string,kind:MediaKind) => {
+        clients[clientID] = {
+            ...clients[clientID],
+            producerIDs:{
+                ...(clients[clientID]?.producerIDs || {}),
+                [kind]:producerID
+            }
         }
+    },
+    setClientProducerTransportID = (clientID:string,producerTransportID:string,kind:MediaKind) => {
+        clients[clientID] = {
+            ...clients[clientID],
+            producerTransportIDs:{
+                ...(clients[clientID]?.producerTransportIDs || {}),
+                [kind]:producerTransportID
+            }
+        }
+    },
+    setClientConsumerTransportID = (
+        clientID:string,
+        transportID:string,
+        producerClientID:string,
+        kind:MediaKind
     ) => {
-        clients[id] = {
-            ...clients[id],
-            ...(!!producerID && {producerID}),
-            ...(!!producerTransportID && {producerTransportID}),
+        clients[clientID] = {
+            ...clients[clientID],
+            consumerTransportIDs:{
+                ...(clients[clientID]?.consumerTransportIDs || {}),
+                [producerClientID]:{
+                    ...(clients[clientID]?.consumerTransportIDs?.[producerClientID] || {}),
+                    [kind]:transportID
+                }
+            }
+        }
+    },
+    setClientConsumerID = (
+        clientID:string,
+        consumerID:string,
+        producerClientID:string,
+        kind:MediaKind
+    ) => {
+        clients[clientID] = {
+            ...clients[clientID],
+            consumerIDs:{
+                ...(clients[clientID]?.consumerIDs || {}),
+                [producerClientID]:{
+                    ...(clients[clientID]?.consumerIDs?.[producerClientID] || {}),
+                    [kind]:consumerID
+                }
+            }
         }
     },
     findClientID = (ws:WebSocket) => {
@@ -88,38 +146,92 @@ const
         return null
     },
     findRoomIdOfClient = (id:string) => clients[id]?.roomID || null,
-    deleteClient = (id:string) => {
-        const {roomID,producerID,producerTransportID,consumerTransportIDs,socket} = clients[id]
+    deleteClient = (clientID:string) => {
+        const {
+            roomID:thisClientRoomID,
+            producerIDs,
+            producerTransportIDs,
+            consumerIDs:thisClientConsumerIDs,
+            consumerTransportIDs:thisClientConsumerTransportIDs,
+            socket
+        } = clients[clientID]
 
-        const deleteRoom = !!producerID
-
-        if (!!producerID){
-            const broadcastMessage:IdeleteProducer = {
-                type:'deleteProducer',
-                payload:{ producerID }
-            }
-            broadcast(broadcastMessage,id)
-        }
-
-        if (roomID in rooms){
-            if (rooms[roomID].length===1 && rooms[roomID][0]===id) delete rooms[roomID]
-            else rooms[roomID] = [...rooms[roomID].filter(e=>e!==id)]
-        }
-        if (!!producerID) deleteProducer(producerID)
-        if (!!producerTransportID) deleteTransport(producerTransportID)
-        if (!!consumerTransportIDs.length) consumerTransportIDs.forEach(e=>{ delete transports[e] })
-        socket?.terminate()
-        delete clients[id]
-
-        const message:IdeleteClient = {
+        const broadcastMessage:IdeleteClient = {
             type:'deleteClient',
-            payload:{ roomID, deleteRoom }
+            payload:{ clientID }
+        }
+        broadcast(broadcastMessage,clientID)
+
+        if (!!producerIDs){
+            Object.values(producerIDs).forEach(producerID=>{
+                deleteProducer(producerID)
+            })
+        }
+
+        if (thisClientRoomID in rooms){
+            if (rooms[thisClientRoomID].length===1 && rooms[thisClientRoomID][0]===clientID) delete rooms[thisClientRoomID]
+            else rooms[thisClientRoomID] = [...rooms[thisClientRoomID].filter(e=>e!==clientID)]
+        }
+        if (!!producerIDs) {
+            Object.values(producerIDs).forEach(producerID=>{
+                deleteProducer(producerID)
+            })
+        }
+        if (!!producerTransportIDs) {
+            Object.values(producerTransportIDs).forEach(producerTransportID=>{
+                deleteTransport(producerTransportID)
+            })
+        }
+
+        if (!!thisClientConsumerIDs){
+            Object.values(thisClientConsumerIDs).forEach(pair=>{
+                Object.values(pair).forEach(e=>{
+                    consumers[e]?.close()
+                    delete consumers[e]
+                })
+            })
+        }
+
+        if (!!thisClientConsumerTransportIDs){
+            Object.values(thisClientConsumerTransportIDs).forEach(pair=>{
+                Object.values(pair).forEach(e=>{
+                    transports[e]?.close()
+                    delete transports[e]
+                })
+            })
+        }
+
+        socket?.terminate()
+        delete clients[clientID]
+
+        Object.values(clients).forEach(e=>{
+            const {roomID,consumerIDs,consumerTransportIDs} = e
+            if (roomID === thisClientRoomID){
+                if (!!consumerIDs && clientID in consumerIDs){
+                    Object.values(consumerIDs[clientID]).forEach(f=>{
+                        consumers[f]?.close()
+                        delete consumers[f]
+                    })
+
+                    delete consumerIDs[clientID]
+                }
+    
+                if (!!consumerTransportIDs && clientID in consumerTransportIDs){
+                    Object.values(consumerTransportIDs[clientID]).forEach(f=>{
+                        transports[f]?.close()
+                        delete transports[f]
+                    })
+
+                    delete consumerTransportIDs[clientID]
+                }
+            }
+        })
+
+        const message:IlbDeleteClient = {
+            type:'deleteClient',
+            payload:{ roomID:thisClientRoomID }
         }
         sendToLoadBalancer(message)
-    },
-    addConsumerTransport = (transport:Transport,clientID:string) => {
-        transports[transport.id] = transport
-        clients[clientID].consumerTransportIDs = [...clients[clientID].consumerTransportIDs,transport.id]
     }
 
 export {
@@ -129,14 +241,19 @@ export {
     setupRouter,
     setProducer,
     getProducer,
+    setConsumer,
+    getConsumer,
     deleteProducer,
     setTransport,
     getTransport,
     deleteTransport,
     addClient,
-    setClient,
+    setClientProducerID,
+    setClientProducerTransportID,
+    setClientConsumerTransportID,
+    setClientConsumerID,
     findClientID,
     findRoomIdOfClient,
     deleteClient,
-    addConsumerTransport,
+    // addConsumerTransport,
 }
